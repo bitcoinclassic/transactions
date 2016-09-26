@@ -16,7 +16,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include "Transaction.h"
-#include "StreamingUtils.h"
+#include <CMF.h>
+#include <MessageParser.h>
+#include <MessageBuilder.h>
 #include "StreamMethods.h"
 
 #include <QFile>
@@ -412,7 +414,7 @@ void Transaction::parseTransactionV1(const QByteArray &bytes)
 
     int pos = 4;
     quint64 count = 0;
-    if (!Streaming::unserialize(data, length, pos, count)) {
+    if (!CMF::unserialize(data, length, pos, count)) {
         qWarning() << "Failed to parse in-counter";
         return;
     }
@@ -440,7 +442,7 @@ void Transaction::parseTransactionV1(const QByteArray &bytes)
     }
 
     count = 0;
-    if (!Streaming::unserialize(data, length, pos, count)) {
+    if (!CMF::unserialize(data, length, pos, count)) {
         qWarning() << "Failed to parse out-counter";
         return;
     }

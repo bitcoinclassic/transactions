@@ -52,14 +52,6 @@ static inline unsigned int fetch16bitValue(const char *array, int offset)
     return answer;
 }
 
-/// returns amount of bytes the output is
-int serialize(char *data, quint64 value);
-
-/**
- * take input data, which is of size dataSize and unserialize a utf8 encoded unsigned integer into result.
- */
-bool unserialize(const char *data, int dataSize, int &position, quint64 &result);
-
 // Bitcoin has its own, kinda braindead, var-int "compact" format.
 // Its not very compact, though.
 inline quint64 fetchBitcoinCompact(const char *array, int &offset)

@@ -17,43 +17,6 @@
  */
 #include "StreamMethods.h"
 
-int Streaming::serialize(char *data, quint64 value)
-{
-    int pos = 0;
-    while (true) {
-        data[pos] = (value & 0x7F) | (pos ? 0x80 : 0x00);
-        if (value <= 0x7F)
-            break;
-        value = (value >> 7) - 1;
-        pos++;
-    }
-
-    // reverse
-    for (int i = pos / 2; i >= 0; --i) {
-        qSwap(data[i], data[pos - i]);
-    }
-    return pos + 1;
-}
-
-bool Streaming::unserialize(const char *data, int dataSize, int &position, quint64 &result)
-{
-    Q_ASSERT(data);
-    Q_ASSERT(result == 0);
-    Q_ASSERT(position >= 0);
-    int pos = position;
-    while (pos - position < 8 && pos < dataSize) {
-        unsigned char byte = data[pos++];
-        result = (result << 7) | (byte & 0x7F);
-        if (byte & 0x80)
-            result++;
-        else {
-            position = pos;
-            return true;
-        }
-    }
-    return false;
-}
-
 void Streaming::insert32BitInt(QByteArray &array, quint32 value, int pos)
 {
     Q_ASSERT(pos >= 0);
