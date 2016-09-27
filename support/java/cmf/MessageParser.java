@@ -34,12 +34,12 @@ public class MessageParser
                 long newTag = vi.unserialize();
                 if (newTag > 0xFFFF) {
                     System.out.println("Malformed tag-type "+ newTag + " is a too large enum value");
-                    return State.END_OF_DOCUMENT;
+                    return State.ERROR;
                 }
                 position = vi.getPosition() - 1;
                 tag = (int) newTag;
             } catch (Exception e) {
-                return State.END_OF_DOCUMENT;
+                return State.ERROR;
             }
         }
 
@@ -54,7 +54,7 @@ public class MessageParser
                     value *= -1;
                 this.value = new Long(value);
             } catch (Exception e) {
-                return State.END_OF_DOCUMENT;
+                return State.ERROR;
             }
             break;
         case BYTEARRAY:
@@ -70,7 +70,7 @@ public class MessageParser
                 dataLength = length;
                 position = dataStart + length;
             } catch (Exception e) {
-                return State.END_OF_DOCUMENT;
+                return State.ERROR;
             }
             break;
         case BOOL_TRUE:

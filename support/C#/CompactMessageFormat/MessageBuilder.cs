@@ -28,7 +28,6 @@ namespace CMF
 			Add(tag, (long) value);
 		}
 
-		// Only throws if your JRE doens't support UTF-8, which it really should
 		public void Add(int tag, String value) {
 			write(tag, ValueType.STRING);
 			byte[] serializedData = Encoding.UTF8.GetBytes(value);

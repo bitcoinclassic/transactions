@@ -32,12 +32,13 @@ namespace CMF
 					long newTag = vi.Unserialize();
 					if (newTag > 0xFFFF) {
 						Console.WriteLine("Malformed tag-type "+ newTag + " is a too large enum value");
-						return State.END_OF_DOCUMENT;
+						return State.ERROR;
 					}
 					position = vi.GetPosition() - 1;
 					tag = (int) newTag;
-				} catch (Exception) {
-					return State.END_OF_DOCUMENT;
+				} catch (Exception e) {
+					Console.WriteLine("Malformed varint; "+ e.Message);
+					return State.ERROR;
 				}
 			}
 
@@ -52,8 +53,9 @@ namespace CMF
 						this.value = value * -1;
 					else
 						this.value = value;
-				} catch (Exception) {
-					return State.END_OF_DOCUMENT;
+				} catch (Exception e) {
+					Console.WriteLine("Malformed varint; "+ e.Message);
+					return State.ERROR;
 				}
 				break;
 			case ValueType.BYTEARRAY:
@@ -68,8 +70,9 @@ namespace CMF
 					dataStart = vi.GetPosition();
 					dataLength = length;
 					position = dataStart + length;
-				} catch (Exception) {
-					return State.END_OF_DOCUMENT;
+				} catch (Exception e) {
+					Console.WriteLine("Malformed varint; "+ e.Message);
+					return State.ERROR;
 				}
 				break;
 			case ValueType.BOOL_TRUE:

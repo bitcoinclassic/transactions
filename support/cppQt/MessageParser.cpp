@@ -49,9 +49,8 @@ MessageParser::Type MessageParser::next()
             ok = false;
         }
         --m_position;
-        if (!ok) {
-            return EndOfDocument;
-        }
+        if (!ok)
+            return Error;
         m_tag = newTag;
     }
 
@@ -62,7 +61,7 @@ MessageParser::Type MessageParser::next()
         bool ok = CMF::unserialize(m_privData, m_data.size(), ++m_position, value);
         if (!ok) {
             --m_position;
-            return EndOfDocument;
+            return Error;
         }
         if (type == CMF::NegativeNumber)
             value *= -1;
@@ -74,9 +73,9 @@ MessageParser::Type MessageParser::next()
         int newPos = m_position + 1;
         bool ok = CMF::unserialize(m_privData, m_data.size(), newPos, value);
         if (!ok)
-            return EndOfDocument;
+            return Error;
         if (newPos + value > (unsigned int) m_data.count()) // need more bytes
-            return EndOfDocument;
+            return Error;
 
         m_valueState = type == CMF::ByteArray ? LazyByteArray : LazyString;
         m_dataStart = newPos;
