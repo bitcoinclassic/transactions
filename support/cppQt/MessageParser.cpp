@@ -25,7 +25,6 @@ MessageParser::MessageParser(const QByteArray &data)
     : m_data(data),
     m_privData(m_data.data()),
     m_position(0),
-    m_validTagFound(false),
     m_tag(0),
     m_valueState(ValueParsed),
     m_dataStart(-1),

@@ -142,7 +142,6 @@ public class MessageParser
     private byte[] data = null;
     private int position = 0;
     private int endPosition = 0;
-    private boolean validTagFound = false;
     private int tag = 0;
 
     private enum Lazy {

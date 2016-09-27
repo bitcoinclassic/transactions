@@ -53,7 +53,6 @@ private:
     const QByteArray m_data;
     const char *m_privData;
     int m_position;
-    bool m_validTagFound;
     QVariant m_value;
     quint32 m_tag;
 
