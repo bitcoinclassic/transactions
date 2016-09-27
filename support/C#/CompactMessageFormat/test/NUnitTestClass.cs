@@ -1,4 +1,18 @@
-﻿using NUnit.Framework;
+﻿/* Copyright (c) 2016 Tom Zander <tomz@freedommail.ch>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+using NUnit.Framework;
 using System;
 using System.Text;
 
@@ -22,10 +36,10 @@ namespace CMF.test
 
 			{
 				MessageParser parser = new MessageParser(buffer, 0, 3);
-				Assert.AreEqual(MessageParser.State.FOUND_TAG, parser.Next());
+				Assert.AreEqual(MessageParser.State.FoundTag, parser.Next());
 				Assert.AreEqual(15, parser.GetTag());
 				Assert.AreEqual(6512, parser.GetInt());
-				Assert.AreEqual(MessageParser.State.END_OF_DOCUMENT, parser.Next());
+				Assert.AreEqual(MessageParser.State.EndOfDocument, parser.Next());
 			}
 
 			{
@@ -41,10 +55,10 @@ namespace CMF.test
 
 			{
 				MessageParser parser = new MessageParser(buffer, 0, 5);
-				Assert.AreEqual(MessageParser.State.FOUND_TAG, parser.Next());
+				Assert.AreEqual(MessageParser.State.FoundTag, parser.Next());
 				Assert.AreEqual(129, parser.GetTag());
 				Assert.AreEqual(6512, parser.GetInt());
-				Assert.AreEqual(MessageParser.State.END_OF_DOCUMENT, parser.Next());
+				Assert.AreEqual(MessageParser.State.EndOfDocument, parser.Next());
 			}
 		}
 
@@ -88,24 +102,23 @@ namespace CMF.test
 			Assert.AreEqual((byte) 40, buffer[16]);
 
 			MessageParser parser = new MessageParser(buffer, 0, builder.GetPosition());
-			Assert.AreEqual(MessageParser.State.FOUND_TAG, parser.Next());
+			Assert.AreEqual(MessageParser.State.FoundTag, parser.Next());
 			Assert.AreEqual(1, parser.GetTag());
 			Assert.AreEqual("Föo", parser.GetString());
-			Assert.AreEqual(MessageParser.State.FOUND_TAG, parser.Next());
+			Assert.AreEqual(MessageParser.State.FoundTag, parser.Next());
 			Assert.AreEqual(200, parser.GetTag());
 			byte[] parsed = parser.getByteArray();
 			Assert.AreEqual(blob.Length, parsed.Length);
 			for (int i = 0; i < blob.Length; ++i) {
 				Assert.AreEqual(blob[i], parsed[i]);
 			}
-			Assert.AreEqual(MessageParser.State.FOUND_TAG, parser.Next());
+			Assert.AreEqual(MessageParser.State.FoundTag, parser.Next());
 			Assert.AreEqual(3, parser.GetTag());
 			Assert.AreEqual(true, parser.GetBoolean());
-			Assert.AreEqual(MessageParser.State.FOUND_TAG, parser.Next());
+			Assert.AreEqual(MessageParser.State.FoundTag, parser.Next());
 			Assert.AreEqual(40, parser.GetTag());
 			Assert.AreEqual(false, parser.GetBoolean());
-			Assert.AreEqual(MessageParser.State.END_OF_DOCUMENT, parser.Next());
+			Assert.AreEqual(MessageParser.State.EndOfDocument, parser.Next());
 		}
 	}
 }
-	

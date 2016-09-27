@@ -25,6 +25,17 @@
 class QIODevice;
 class QString;
 
+/**
+ * MessageParser takes a CMF stream and parses it into tokens.
+ *
+ * A user can iterate over tokens by repeatedly calling next() and as
+ * long as FoundTag is returned you can then find the token-tag
+ * as well as the actual data. The MessageParser will actually have typed
+ * data based on what was encoded in the CMF stream. You can access
+ * this using the different getters like getLong() getString(). Please note
+ * that if the requested data is not what was present in the stream you will
+ * end up throwing a casting exception in those getters.
+ */
 class MessageParser
 {
 public:
