@@ -39,6 +39,7 @@
     <Compile Include="ValueType.cs" />
     <Compile Include="MessageParser.cs" />
     <Compile Include="MessageBuilder.cs" />
+    <Compile Include="transaction\TransactionFormat.cs" />
     <Compile Include="test\NUnitTestClass.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
