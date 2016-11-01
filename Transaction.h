@@ -29,6 +29,7 @@ public:
     Transaction();
 
     void read(const QString &filename);
+    void read(const QByteArray &data);
     void writev4(const QString &filename, bool includeSignatures);
 
     bool isValid() const;

@@ -44,7 +44,11 @@ void Transaction::read(const QString &filename)
         qWarning() << "Empty input file";
         return;
     }
+    read(bytes);
+}
 
+void Transaction::read(const QByteArray &bytes)
+{
     if (bytes.length() <=4 || bytes.at(1) != 0 || bytes.at(2) != 0 || bytes.at(3) != 0) {
         qWarning() << "Unknown transaction format. Cowerdly bailing out before trying to parse.";
     } else if (bytes.at(0) <= 2) {

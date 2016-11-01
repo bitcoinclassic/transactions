@@ -33,6 +33,8 @@ int main(int x, char **y) {
     parser.addPositionalArgument("transaction", "Source transaction");
     parser.addPositionalArgument("out-with-sign", "output transaction, including witness");
     parser.addPositionalArgument("out-small", "output transaction");
+    QCommandLineOption rawtx(QStringList() << "rawtx", "pass a raw hexformatted transaction instead of a filename" );
+    parser.addOption(rawtx);
 
     QCommandLineOption debug(QStringList() << "d" << "debug", "Show content of the transaction" );
     parser.addOption(debug);
@@ -43,7 +45,12 @@ int main(int x, char **y) {
         parser.showHelp(1);
 
     Transaction t;
-    t.read(args.at(0));
+    if (parser.isSet(rawtx)) {
+        QByteArray data = QByteArray::fromHex(args.at(0).toLatin1());
+        t.read(data);
+    } else {
+        t.read(args.at(0));
+    }
 
     if (!t.isValid())
         return 1;
