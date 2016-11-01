@@ -487,6 +487,7 @@ void Transaction::parseTransactionV4(const QByteArray &bytes)
     int inputScriptCount = 0;
     bool storedOutValue = false, storedOutScript = false;
     qint64 outValue = 0;
+    // TODO section.
 
     while (type == MessageParser::FoundTag) {
         switch (parser.tag()) {
@@ -527,11 +528,32 @@ void Transaction::parseTransactionV4(const QByteArray &bytes)
             else
                 storedOutScript = true;
             break;
+        case LockByBlock:
+            qWarning() << "LockByBlock not supported right now" << parser.data();
+            break;
+        case LockByTime:
+            qWarning() << "LockByTime not supported right now" << parser.data();
+            break;
+        case CoinbaseMessage:
+            if (!inputs.isEmpty())
+                qWarning() << "CoinbaseMessage found on an TX with inputs, this is not allowed!";
+            {
+                TxIn in;
+                in.script = parser.data().toByteArray();
+                inputs.append(in);
+            }
+            break;
+        case ScriptVersion:
+            qWarning() << "ScriptVersion not supported right now" << parser.data();
+            break;
+        case TxInPrevHeight:
+            qWarning() << "TxInPrevHeight found, not supported";
+            break;
+        case 11: case 12: case 13: case 14: case 15: case 16: case 17: case 18: case 19:
+            qWarning() << "Found unknown tag, skipping" << parser.data();
+            break;
         default:
-         // case LockByBlock:
-         // case LockByTime:
-         // case ScriptVersion:
-         // case TxInPrevHeight:
+            qWarning() << "Found unknown tag, this TX is invalid" << parser.data();
             break;
         }
         type = parser.next();

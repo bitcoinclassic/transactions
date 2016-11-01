@@ -47,6 +47,7 @@ public:
         TxOutScript,        // bytearray
         LockByBlock,        // PositiveNumber
         LockByTime,         // PositiveNumber
+        CoinbaseMessage,    // Bytearray
         ScriptVersion       // PositiveNumber
     };
 
@@ -58,7 +59,7 @@ private:
 
     struct TxIn {
         TxIn() : prevIndex(-1), sequence(0) {}
-        TxIn(const QByteArray &hash) : transaction(hash), prevIndex(-1), sequence(0) {}
+        TxIn(const QByteArray &prevHash) : transaction(prevHash), prevIndex(-1), sequence(0) {}
         QByteArray transaction;
         int prevIndex;
         QByteArray script;
