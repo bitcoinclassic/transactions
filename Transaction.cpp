@@ -101,15 +101,8 @@ void Transaction::writev4(const QString &filename, bool includeSignatures)
     }
 }
 
-bool Transaction::isValid() const
-{
-    return !(m_inputs.isEmpty() || m_outputs.isEmpty() || m_version <= 0);
-}
-
 void Transaction::debug() const
 {
-    Q_ASSERT(isValid());
-
     QTextStream out(stdout);
     out << "{\ninputs :[\n";
     foreach (const TxIn &tx, m_inputs) {
@@ -121,6 +114,9 @@ void Transaction::debug() const
         out << "  }\n";
     }
     out << "]\n";
+    if (!m_coinbaseMessage.isEmpty()) {
+        out << "coinbase-message: \"" << QString::fromLatin1(m_coinbaseMessage) << "\"\n";
+    }
     out << "outputs: [\n";
     foreach (const TxOut &tx, m_outputs) {
         out << "  {\n    amount: " << tx.value << endl;
@@ -483,6 +479,7 @@ void Transaction::parseTransactionV4(const QByteArray &bytes)
 
     QList<TxIn> inputs;
     QList<TxOut> outputs;
+    QByteArray coinbaseMessage;
     MessageParser::Type type = parser.next();
     int inputScriptCount = 0;
     bool storedOutValue = false, storedOutScript = false;
@@ -494,6 +491,7 @@ void Transaction::parseTransactionV4(const QByteArray &bytes)
         case TxEnd:
             m_inputs = inputs;
             m_outputs = outputs;
+            m_coinbaseMessage = coinbaseMessage;
             return;
         case TxInPrevHash:
             inputs.append(TxIn(parser.data().toByteArray()));
@@ -537,11 +535,7 @@ void Transaction::parseTransactionV4(const QByteArray &bytes)
         case CoinbaseMessage:
             if (!inputs.isEmpty())
                 qWarning() << "CoinbaseMessage found on an TX with inputs, this is not allowed!";
-            {
-                TxIn in;
-                in.script = parser.data().toByteArray();
-                inputs.append(in);
-            }
+            coinbaseMessage = parser.data().toByteArray();
             break;
         case ScriptVersion:
             qWarning() << "ScriptVersion not supported right now" << parser.data();

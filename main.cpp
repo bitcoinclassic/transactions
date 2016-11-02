@@ -52,9 +52,6 @@ int main(int x, char **y) {
         t.read(args.at(0));
     }
 
-    if (!t.isValid())
-        return 1;
-
     if (parser.isSet(debug))
         t.debug();
 

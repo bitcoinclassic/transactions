@@ -32,8 +32,6 @@ public:
     void read(const QByteArray &data);
     void writev4(const QString &filename, bool includeSignatures);
 
-    bool isValid() const;
-
     void debug() const;
     void debugScript(const QByteArray &script, int textIndent, QTextStream &out) const;
 
@@ -58,8 +56,8 @@ private:
     int m_version;
 
     struct TxIn {
-        TxIn() : prevIndex(-1), sequence(0) {}
-        TxIn(const QByteArray &prevHash) : transaction(prevHash), prevIndex(-1), sequence(0) {}
+        TxIn() : prevIndex(0), sequence(0) {}
+        TxIn(const QByteArray &prevHash) : transaction(prevHash), prevIndex(0), sequence(0) {}
         QByteArray transaction;
         int prevIndex;
         QByteArray script;
@@ -76,6 +74,7 @@ private:
     QList<TxOut> m_outputs;
 
     quint32 m_nLockTime;
+    QByteArray m_coinbaseMessage;
 };
 
 #endif
