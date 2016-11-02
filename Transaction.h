@@ -27,9 +27,18 @@ class Transaction
 {
 public:
     Transaction();
+    enum Lint {
+        LenientParsing,
+        StrictParsing
+    };
 
-    void read(const QString &filename);
-    void read(const QByteArray &data);
+    /**
+     * @brief read transaction from a file.
+     * @return the method returns true if parsing went fine. If lint is LenientParsing
+     *  then we won't fail for simple mistakes (like an incomplete transaction)
+     */
+    bool read(const QString &filename, Lint lint = LenientParsing);
+    bool read(const QByteArray &data, Lint lint = LenientParsing);
     void writev4(const QString &filename, bool includeSignatures);
 
     void debug() const;
@@ -51,7 +60,7 @@ public:
 
 private:
     void parseTransactionV1(const QByteArray &bytes);
-    void parseTransactionV4(const QByteArray &bytes);
+    bool parseTransactionV4(const QByteArray &bytes, Lint lint);
 
     int m_version;
 

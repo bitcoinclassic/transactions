@@ -35,6 +35,8 @@ int main(int x, char **y) {
     parser.addPositionalArgument("out-small", "output transaction");
     QCommandLineOption rawtx(QStringList() << "rawtx", "pass a raw hexformatted transaction instead of a filename" );
     parser.addOption(rawtx);
+    QCommandLineOption lint("lint", "check transaction for any problems");
+    parser.addOption(lint);
 
     QCommandLineOption debug(QStringList() << "d" << "debug", "Show content of the transaction" );
     parser.addOption(debug);
@@ -44,12 +46,14 @@ int main(int x, char **y) {
     if (args.isEmpty())
         parser.showHelp(1);
 
+    Transaction::Lint parsingType = parser.isSet(lint) ? Transaction::StrictParsing : Transaction::LenientParsing;
+
     Transaction t;
     if (parser.isSet(rawtx)) {
         QByteArray data = QByteArray::fromHex(args.at(0).toLatin1());
-        t.read(data);
+        t.read(data, parsingType);
     } else {
-        t.read(args.at(0));
+        t.read(args.at(0), parsingType);
     }
 
     if (parser.isSet(debug))

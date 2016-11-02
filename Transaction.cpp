@@ -30,24 +30,24 @@ Transaction::Transaction()
 {
 }
 
-void Transaction::read(const QString &filename)
+bool Transaction::read(const QString &filename, Lint lint)
 {
     qDebug() << "read" << filename;
     QFile in(filename);
     if (!in.open(QIODevice::ReadOnly)) {
         qWarning() << "Failed to open input" << filename;
-        return;
+        return false;
     }
     QByteArray bytes = in.readAll();
     in.close();
     if (bytes.isEmpty()) {
         qWarning() << "Empty input file";
-        return;
+        return false;
     }
-    read(bytes);
+    return read(bytes, lint);
 }
 
-void Transaction::read(const QByteArray &bytes)
+bool Transaction::read(const QByteArray &bytes, Lint lint)
 {
     if (bytes.length() <=4 || bytes.at(1) != 0 || bytes.at(2) != 0 || bytes.at(3) != 0) {
         qWarning() << "Unknown transaction format. Cowerdly bailing out before trying to parse.";
@@ -55,10 +55,11 @@ void Transaction::read(const QByteArray &bytes)
         parseTransactionV1(bytes);
     } else if (bytes.at(0) == 4) {
         m_version = 4;
-        parseTransactionV4(bytes.mid(4));
+        return parseTransactionV4(bytes.mid(4), lint);
     } else {
         qWarning() << "Unknown transaction version. Can't parse.";
     }
+    return true;
 }
 
 void Transaction::writev4(const QString &filename, bool includeSignatures)
@@ -471,7 +472,7 @@ void Transaction::parseTransactionV1(const QByteArray &bytes)
     m_outputs = outputs;
 }
 
-void Transaction::parseTransactionV4(const QByteArray &bytes)
+bool Transaction::parseTransactionV4(const QByteArray &bytes, Lint lint)
 {
     MessageParser parser(bytes);
     Q_ASSERT(m_inputs.isEmpty());
@@ -485,32 +486,61 @@ void Transaction::parseTransactionV4(const QByteArray &bytes)
     bool storedOutValue = false, storedOutScript = false;
     qint64 outValue = 0;
     // TODO section.
+    enum Section {
+        Undefined,
+        Inputs,
+        Outputs,
+        Additional,
+        Signatures,
+        End
+    };
+    Section section = Undefined;
+    QStringList errors;
+
+    struct ErrorReporter {
+        ~ErrorReporter() {
+            foreach (const QString &error, *errors) {
+                qWarning() << "Parse warning:" << error;
+            }
+        }
+        QStringList *errors;
+    };
+    ErrorReporter reporter;
+    reporter.errors = &errors;
 
     while (type == MessageParser::FoundTag) {
         switch (parser.tag()) {
         case TxEnd:
-            m_inputs = inputs;
-            m_outputs = outputs;
-            m_coinbaseMessage = coinbaseMessage;
-            return;
+            section = End;
+            break;
         case TxInPrevHash:
+            if (lint == StrictParsing && section > Inputs)
+                errors << "TxInPrevHash found out of section";
+            section = Inputs;
             inputs.append(TxIn(parser.data().toByteArray()));
             break;
         case TxInPrevIndex:
             if (inputs.isEmpty()) {
-                qWarning() << "TxInPrevIndex seen without a TxInPrevHash before it";
-                return;
+                errors << "TxInPrevIndex seen without a TxInPrevHash before it";
+                return false;
             }
+            if (lint == StrictParsing && section > Inputs)
+                errors << "TxInPrevIndex found out of section";
+            section = Inputs;
             inputs.last().prevIndex = parser.data().toInt();
             break;
         case TxInScript:
             if (inputScriptCount >= inputs.size()) {
-                qWarning() << "Too many TxInScript tags in tx";
-                return;
+                errors << "Too many TxInScript tags in tx";
+                break;
             }
+            section = Signatures;
             inputs[inputScriptCount++].script = parser.data().toByteArray();
             break;
         case TxOutValue:
+            if (lint == StrictParsing && section > Outputs)
+                errors << "TxOutValue found out of section";
+            section = Outputs;
             if (storedOutScript) { // add it
                 outputs.last().value = parser.data().toLongLong();
                 storedOutScript = storedOutValue = false;
@@ -520,6 +550,9 @@ void Transaction::parseTransactionV4(const QByteArray &bytes)
             }
             break;
         case TxOutScript:
+            if (lint == StrictParsing && section > Outputs)
+                errors << "TxOutScript found out of section";
+            section = Outputs;
             outputs.append(TxOut(parser.data().toByteArray(), outValue));
             if (storedOutValue)
                 storedOutValue = false;
@@ -527,36 +560,46 @@ void Transaction::parseTransactionV4(const QByteArray &bytes)
                 storedOutScript = true;
             break;
         case LockByBlock:
-            qWarning() << "LockByBlock not supported right now" << parser.data();
+            section = Additional;
+            errors << "LockByBlock not supported right now" << parser.data().toString();
             break;
         case LockByTime:
-            qWarning() << "LockByTime not supported right now" << parser.data();
+            section = Additional;
+            errors << "LockByTime not supported right now" << parser.data().toString();
             break;
         case CoinbaseMessage:
+            if (lint == StrictParsing && section > Inputs)
+                errors << "CoinbaseMessage found out of section";
+            section = Inputs;
             if (!inputs.isEmpty())
-                qWarning() << "CoinbaseMessage found on an TX with inputs, this is not allowed!";
+                errors << "CoinbaseMessage found on an TX with inputs, this is not allowed!";
             coinbaseMessage = parser.data().toByteArray();
             break;
         case ScriptVersion:
-            qWarning() << "ScriptVersion not supported right now" << parser.data();
+            errors << "ScriptVersion not supported right now" << parser.data().toString();
             break;
         case TxInPrevHeight:
-            qWarning() << "TxInPrevHeight found, not supported";
+            errors << "TxInPrevHeight found, not supported";
             break;
         case 11: case 12: case 13: case 14: case 15: case 16: case 17: case 18: case 19:
-            qWarning() << "Found unknown tag, skipping" << parser.data();
+            errors << "Found unknown tag, skipping" << parser.data().toString();
             break;
         default:
-            qWarning() << "Found unknown tag, this TX is invalid" << parser.data();
+            errors << "Found unknown tag, this TX is invalid" << parser.data().toString();
             break;
         }
         type = parser.next();
     }
 
     if (type != MessageParser::EndOfDocument) {
-        qWarning() << "Failed parsing transaction, MessageParser gave error.";
-    } else {
-        m_inputs = inputs;
-        m_outputs = outputs;
+        errors << "Failed parsing transaction, MessageParser gave error.";
+        return false;
     }
+
+    m_inputs = inputs;
+    m_outputs = outputs;
+    m_coinbaseMessage = coinbaseMessage;
+    if (lint == StrictParsing && ((m_coinbaseMessage.isEmpty() && m_inputs.isEmpty()) || m_outputs.isEmpty() || !errors.isEmpty()))
+        return false;
+    return true;
 }
