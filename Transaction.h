@@ -42,24 +42,24 @@ public:
     void writev4(const QString &filename, bool includeSignatures);
 
     void debug() const;
-    void debugScript(const QByteArray &script, int textIndent, QTextStream &out) const;
+    static void debugScript(const QByteArray &script, int textIndent, QTextStream &out);
+    static void debugInScript(const QList<QByteArray> &scriptItems, int textIndent, QTextStream &out);
 
     enum MessageTags {
         TxEnd = 0,          // BoolTrue
         TxInPrevHash,       // sha256 (Bytearray)
         TxInPrevIndex,      // PositiveNumber
-        TxInPrevHeight,     // PositiveNumber
-        TxInScript,         // bytearray
+        TxInputStackItem,  // bytearray
+        TxInputStackItemContinued, // bytearray
         TxOutValue,         // PositiveNumber (in satoshis)
         TxOutScript,        // bytearray
-        LockByBlock,        // PositiveNumber
-        LockByTime,         // PositiveNumber
-        CoinbaseMessage,    // Bytearray
-        ScriptVersion       // PositiveNumber
+        TxRelativeBlockLock,// PositiveNumber
+        TxRelativeTimeLock, // PositiveNumber
+        CoinbaseMessage     // Bytearray. Max 100 bytes.
     };
 
 private:
-    void parseTransactionV1(const QByteArray &bytes);
+    bool parseTransactionV1(const QByteArray &bytes, Lint lint);
     bool parseTransactionV4(const QByteArray &bytes, Lint lint);
 
     int m_version;
@@ -69,8 +69,9 @@ private:
         TxIn(const QByteArray &prevHash) : transaction(prevHash), prevIndex(0), sequence(0) {}
         QByteArray transaction;
         int prevIndex;
-        QByteArray script;
-        int sequence;
+        bool setScript(const QByteArray &script, Lint lint);
+        QList<QByteArray> scriptItems;
+        unsigned int sequence;
     };
     struct TxOut {
         TxOut(){}

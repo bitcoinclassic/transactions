@@ -51,8 +51,9 @@ bool Transaction::read(const QByteArray &bytes, Lint lint)
 {
     if (bytes.length() <=4 || bytes.at(1) != 0 || bytes.at(2) != 0 || bytes.at(3) != 0) {
         qWarning() << "Unknown transaction format. Cowerdly bailing out before trying to parse.";
+        return false;
     } else if (bytes.at(0) <= 2) {
-        parseTransactionV1(bytes);
+        return parseTransactionV1(bytes, lint);
     } else if (bytes.at(0) == 4) {
         m_version = 4;
         return parseTransactionV4(bytes.mid(4), lint);
@@ -96,7 +97,11 @@ void Transaction::writev4(const QString &filename, bool includeSignatures)
 
     if (includeSignatures) {
         foreach (const TxIn &tx, m_inputs) {
-            builder.add(TxInScript, tx.script);
+            bool first = true;
+            foreach (auto item, tx.scriptItems) {
+                builder.add(first ? TxInputStackItem : TxInputStackItemContinued, item);
+                first = false;
+            }
         }
         builder.add(TxEnd, true);
     }
@@ -109,9 +114,45 @@ void Transaction::debug() const
     foreach (const TxIn &tx, m_inputs) {
         out << "  {\n    txid: " << tx.transaction.toHex() << endl;
         out << "    vout: " << tx.prevIndex << endl;
-        out << "    sequence: " << QString::number(tx.sequence, 16) << endl;
+        if (tx.sequence & (1 << 31)) {
+            out << "    sequence: " << QString::number(tx.sequence, 16) << endl;
+        } else {
+            if (tx.sequence & (1 << 22)) {
+                quint32 time = tx.sequence & 0xFFFF;
+                quint32 timeout = time * 512;
+                const int SECSPERHOUR = 3600;
+                const int SECSPERDAY = SECSPERHOUR * 24;
+                const int SECSPERWEEK = SECSPERDAY * 7;
+                out << "    time-based-relative-locktime: " << QString::number(time, 16)
+                    << " (" << timeout << "sec / ";
+
+                if (timeout > SECSPERWEEK)  {
+                    out << (timeout / SECSPERWEEK) << " weeks ";
+                    timeout -= (timeout / SECSPERWEEK) * SECSPERWEEK;
+                }
+                if (timeout > SECSPERDAY)  {
+                    out << (timeout / SECSPERDAY) << " days ";
+                    timeout -= (timeout / SECSPERDAY) * SECSPERDAY;
+                }
+                if (timeout > SECSPERHOUR)  {
+                    out << (timeout / SECSPERHOUR) << " hours ";
+                    timeout -= (timeout / SECSPERHOUR) * SECSPERHOUR;
+                }
+                if (timeout > 60)  {
+                    out << (timeout / 60) << " minutes ";
+                    timeout -= (timeout / 60) * 60;
+                }
+                if (timeout > 0)  {
+                    out << timeout << " seconds";
+                }
+                out << ")\n";
+            } else if (tx.sequence != 0) {
+                out << "    block-based-relative-locktime: " << QString::number(tx.sequence & 0xFFFF) << endl;
+            }
+
+        }
         out << "    script: ";
-        debugScript(tx.script, 12, out);
+        debugInScript(tx.scriptItems, 12, out);
         out << "  }\n";
     }
     out << "]\n";
@@ -148,9 +189,13 @@ int printBytes(const char *data, int offset, QTextStream &out, int bytes = -1)
 }
 }
 
-void Transaction::debugScript(const QByteArray &script, int textIndent, QTextStream &out) const
+void Transaction::debugScript(const QByteArray &script, int textIndent, QTextStream &out)
 {
     const int length = script.length();
+    if (length == 0) {
+        out << "\"\"" << endl;
+        return;
+    }
     const char *data = script.constData();
     int pos = 0;
     QString indent;
@@ -181,7 +226,7 @@ void Transaction::debugScript(const QByteArray &script, int textIndent, QTextStr
             case 78: {
                 const int width = k - 75;
                 out << "OP_PUSHDATA" << width << " ";
-                quint32 bytes = data[++pos];
+                quint32 bytes = (quint8) data[++pos];
                 if (width > 1) {
                     bytes = bytes << 8;
                     bytes += data[++pos];
@@ -192,12 +237,18 @@ void Transaction::debugScript(const QByteArray &script, int textIndent, QTextStr
                         bytes += data[++pos];
                     }
                 }
+                if (bytes >= (unsigned int) length || (int) bytes + pos >= length) { // double check to avoid overflows
+                    out << "\nFAILED; the OP_PUSHDATA says its " << bytes << " bytes, thats more than we have\n";
+                    return;
+                }
                 for (unsigned int i = 0; i < bytes; ++i) {
                     pos++;
                     printHex(data, pos, out);
                 }
                 break;
             }
+            case 79:
+                out << "OP_1NEGATE"; break;
             case 82: case 83: case 84: case 85: case 86: case 87: case 88: case 89: case 90:
             case 91: case 92: case 93: case 94: case 95: case 96: {
                 int count = k - 80;
@@ -397,27 +448,42 @@ void Transaction::debugScript(const QByteArray &script, int textIndent, QTextStr
     }
 }
 
-void Transaction::parseTransactionV1(const QByteArray &bytes)
+void Transaction::debugInScript(const QList<QByteArray> &scriptItems, int textIndent, QTextStream &out)
+{
+    bool first = true;
+    foreach (auto item, scriptItems) {
+        if (item.length() == 1) {
+            debugScript(item, textIndent, out);
+            first = false;
+        } else {
+            if (first)
+                out << endl;
+            for (int i = 0; i < textIndent; ++i)
+                out << ' ';
+            const char *data = item.constData();
+            for (int i = 0; i < item.length(); ++i) {
+                printHex(data, i, out);
+            }
+            out << endl;
+        }
+    }
+}
+
+bool Transaction::parseTransactionV1(const QByteArray &bytes, Lint lint)
 {
     const int length = bytes.length();
     const char *data = bytes.constData();
-    unsigned int version = Streaming::fetch32bitValue(data, 0);
+    m_version = Streaming::fetch32bitValue(data, 0);
     Q_ASSERT(data[0] <= 2);
     Q_ASSERT(data[1] == 0);
     Q_ASSERT(data[2] == 0);
     Q_ASSERT(data[3] == 0);
-    m_version = version & 0xFF;
-
-    if (version > 1) {
-        // bip68
-        Q_ASSERT(false);
-    }
 
     int pos = 4;
     quint64 count = 0;
     if (!CMF::unserialize(data, length, pos, count)) {
         qWarning() << "Failed to parse in-counter";
-        return;
+        return false;
     }
 
     QList<TxIn> inputs;
@@ -432,22 +498,33 @@ void Transaction::parseTransactionV1(const QByteArray &bytes)
         pos += 4;
 
         quint32 scriptLength = Streaming::fetchBitcoinCompact(data, pos);
-        Q_ASSERT(scriptLength < (unsigned int) (length - pos));
+        if (scriptLength >= (unsigned int) (length - pos)) {
+            qWarning() << "ScriptLength (in/" << i << ") out of bounds";
+            return false;
+        }
 
-        tx.script = QByteArray(data + pos, scriptLength);
+        bool ok = tx.setScript(QByteArray(data + pos, scriptLength), lint);
+        if (!ok)
+            return false;
         pos += scriptLength;
         tx.sequence = Streaming::fetch32bitValue(data, pos);
         pos += 4;
         inputs.append(tx);
-        Q_ASSERT(pos < length);
+        if (pos >= length) {
+            qWarning() << "Tx truncated while reading inputs";
+            return false;
+        }
     }
 
     count = 0;
     if (!CMF::unserialize(data, length, pos, count)) {
         qWarning() << "Failed to parse out-counter";
-        return;
+        return false;
     }
-    Q_ASSERT(pos < length);
+    if (pos >= length) {
+        qWarning() << "Tx truncated, can't find outputs";
+        return false;
+    }
 
     QList<TxOut> outputs;
     for (unsigned int i = 0; i < count; ++i) {
@@ -457,19 +534,29 @@ void Transaction::parseTransactionV1(const QByteArray &bytes)
         pos += 8;
 
         quint32 scriptLength = Streaming::fetchBitcoinCompact(data, pos);
-        Q_ASSERT(scriptLength < (unsigned int) (length - pos));
+        if (scriptLength >= (unsigned int) (length - pos)) {
+            qWarning() << "ScriptLength (output/" << i << ") out of bounds";
+            return false;
+        }
 
         tx.script = QByteArray(data + pos, scriptLength);
         pos += scriptLength;
         outputs.append(tx);
-        Q_ASSERT(pos < length);
+        if (pos >= length) {
+            qWarning() << "Tx truncated while reading outputs";
+            return false;
+        }
     }
 
-    Q_ASSERT(pos + 4 == length);
+    if (pos + 4 != length) {
+        qWarning() << "length of tx incorrect (" << length << ", expected" << pos + 4 << ")";
+        return false;
+    }
     m_nLockTime = Streaming::fetch32bitValue(data, pos);
 
     m_inputs= inputs;
     m_outputs = outputs;
+    return true;
 }
 
 bool Transaction::parseTransactionV4(const QByteArray &bytes, Lint lint)
@@ -482,10 +569,9 @@ bool Transaction::parseTransactionV4(const QByteArray &bytes, Lint lint)
     QList<TxOut> outputs;
     QByteArray coinbaseMessage;
     MessageParser::Type type = parser.next();
-    int inputScriptCount = 0;
+    int inputScriptCount = -1;
     bool storedOutValue = false, storedOutScript = false;
     qint64 outValue = 0;
-    // TODO section.
     enum Section {
         Undefined,
         Inputs,
@@ -529,13 +615,21 @@ bool Transaction::parseTransactionV4(const QByteArray &bytes, Lint lint)
             section = Inputs;
             inputs.last().prevIndex = parser.data().toInt();
             break;
-        case TxInScript:
+        case TxInputStackItem:
+            ++inputScriptCount;
+            // fall through
+        case TxInputStackItemContinued:
+            if (inputScriptCount < 0) {
+                if (lint == StrictParsing)
+                    errors << "Missing TxInputStackItem before TxInputStackItemContinued";
+                inputScriptCount = 0;
+            }
             if (inputScriptCount >= inputs.size()) {
-                errors << "Too many TxInScript tags in tx";
+                errors << "Too many TxInputStackItem* tags in tx";
                 break;
             }
             section = Signatures;
-            inputs[inputScriptCount++].script = parser.data().toByteArray();
+            inputs[inputScriptCount].scriptItems.append(parser.data().toByteArray());
             break;
         case TxOutValue:
             if (lint == StrictParsing && section > Outputs)
@@ -559,13 +653,11 @@ bool Transaction::parseTransactionV4(const QByteArray &bytes, Lint lint)
             else
                 storedOutScript = true;
             break;
-        case LockByBlock:
-            section = Additional;
-            errors << "LockByBlock not supported right now" << parser.data().toString();
+        case TxRelativeBlockLock:
+            errors << "TxRelativeBlockLock not supported right now" << parser.data().toString();
             break;
-        case LockByTime:
-            section = Additional;
-            errors << "LockByTime not supported right now" << parser.data().toString();
+        case TxRelativeTimeLock:
+            errors << "TxRelativeTimeLock not supported right now" << parser.data().toString();
             break;
         case CoinbaseMessage:
             if (lint == StrictParsing && section > Inputs)
@@ -574,12 +666,6 @@ bool Transaction::parseTransactionV4(const QByteArray &bytes, Lint lint)
             if (!inputs.isEmpty())
                 errors << "CoinbaseMessage found on an TX with inputs, this is not allowed!";
             coinbaseMessage = parser.data().toByteArray();
-            break;
-        case ScriptVersion:
-            errors << "ScriptVersion not supported right now" << parser.data().toString();
-            break;
-        case TxInPrevHeight:
-            errors << "TxInPrevHeight found, not supported";
             break;
         case 11: case 12: case 13: case 14: case 15: case 16: case 17: case 18: case 19:
             errors << "Found unknown tag, skipping" << parser.data().toString();
@@ -601,5 +687,47 @@ bool Transaction::parseTransactionV4(const QByteArray &bytes, Lint lint)
     m_coinbaseMessage = coinbaseMessage;
     if (lint == StrictParsing && ((m_coinbaseMessage.isEmpty() && m_inputs.isEmpty()) || m_outputs.isEmpty() || !errors.isEmpty()))
         return false;
+    return true;
+}
+
+bool Transaction::TxIn::setScript(const QByteArray &script, Lint lint)
+{
+    scriptItems.clear();
+    const int length = script.length();
+    const char *data = script.constData();
+    int pos = 0;
+
+    while (pos < length) {
+        const quint8 k = data[pos];
+        if (k > 0 && k < 75) {
+            scriptItems.append(QByteArray(data + ++pos, k));
+            pos += k;
+        } else if (k == 0) {
+            scriptItems.append(QByteArray(1, 0));
+            ++pos;
+        } else if (k <= 78) {
+            const int width = k - 75;
+            quint32 bytes = (quint8) data[++pos];
+            if (width > 1) {
+                bytes = bytes << 8;
+                bytes += (quint8) data[++pos];
+                if (width > 2) {
+                    bytes = bytes << 8;
+                    bytes += (quint8) data[++pos];
+                    bytes = bytes << 8;
+                    bytes += (quint8) data[++pos];
+                }
+            }
+            scriptItems.append(QByteArray(data + pos, bytes));
+            pos += bytes + width;
+        } else {
+            qWarning() << "SetScript got an invalid 'in' script. Encountered opcode:" << k;
+            if (lint == StrictParsing) {
+                QTextStream out(stdout);
+                Transaction::debugScript(script, 0, out);
+            }
+            return false;
+        }
+    }
     return true;
 }

@@ -49,12 +49,16 @@ int main(int x, char **y) {
     Transaction::Lint parsingType = parser.isSet(lint) ? Transaction::StrictParsing : Transaction::LenientParsing;
 
     Transaction t;
+    bool success;
     if (parser.isSet(rawtx)) {
         QByteArray data = QByteArray::fromHex(args.at(0).toLatin1());
-        t.read(data, parsingType);
+        success = t.read(data, parsingType);
     } else {
-        t.read(args.at(0), parsingType);
+        success = t.read(args.at(0), parsingType);
     }
+
+    if (!success)
+        return 1;
 
     if (parser.isSet(debug))
         t.debug();
