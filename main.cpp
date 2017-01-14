@@ -60,8 +60,13 @@ int main(int x, char **y) {
     if (!success)
         return 1;
 
-    if (parser.isSet(debug))
+    if (parser.isSet(debug)) {
         t.debug();
+        if (parser.isSet(rawtx)) {
+            QByteArray data = QByteArray::fromHex(args.at(0).toLatin1());
+            qDebug() << "size:" << data.length();
+        }
+    }
 
     if (args.count() > 1) {
         QFileInfo fi(args[1]);
