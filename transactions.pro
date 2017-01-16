@@ -4,12 +4,12 @@ INCLUDEPATH += . support/cppQt
 
 # Input
 HEADERS += StreamMethods.h Transaction.h \
-    support/cppQt/CMF.h \
-    support/cppQt/MessageBuilder.h \
-    support/cppQt/MessageParser.h
+    CMF.h \
+    MessageBuilder.h \
+    MessageParser.h
 
 SOURCES += main.cpp StreamMethods.cpp Transaction.cpp \
-    support/cppQt/CMF.cpp \
-    support/cppQt/MessageBuilder.cpp \
-    support/cppQt/MessageParser.cpp
+    CMF.cpp \
+    MessageBuilder.cpp \
+    MessageParser.cpp
 
