@@ -480,12 +480,7 @@ bool Transaction::parseTransactionV1(const QByteArray &bytes, Lint lint)
     Q_ASSERT(data[3] == 0);
 
     int pos = 4;
-    quint64 count = 0;
-    if (!CMF::unserialize(data, length, pos, count)) {
-        qWarning() << "Failed to parse in-counter";
-        return false;
-    }
-
+    quint64 count = Streaming::fetchBitcoinCompact(data, pos);
     QList<TxIn> inputs;
     for (unsigned int i = 0; i < count; ++i) {
         TxIn tx;
@@ -516,11 +511,7 @@ bool Transaction::parseTransactionV1(const QByteArray &bytes, Lint lint)
         }
     }
 
-    count = 0;
-    if (!CMF::unserialize(data, length, pos, count)) {
-        qWarning() << "Failed to parse out-counter";
-        return false;
-    }
+    count = Streaming::fetchBitcoinCompact(data, pos);
     if (pos >= length) {
         qWarning() << "Tx truncated, can't find outputs";
         return false;
