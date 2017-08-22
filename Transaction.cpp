@@ -501,10 +501,6 @@ bool Transaction::parseTransactionV1(const QByteArray &bytes, Lint lint)
     const int length = bytes.length();
     const char *data = bytes.constData();
     m_version = Streaming::fetch32bitValue(data, 0);
-    Q_ASSERT(data[0] <= 2);
-    Q_ASSERT(data[1] == 0);
-    Q_ASSERT(data[2] == 0);
-    Q_ASSERT(data[3] == 0);
 
     int pos = 4;
     quint64 count = Streaming::fetchBitcoinCompact(data, pos);
@@ -580,66 +576,35 @@ bool Transaction::parseTransactionV1(const QByteArray &bytes, Lint lint)
 bool Transaction::parseTransactionV4(const QByteArray &bytes, Lint lint)
 {
     MessageParser parser(bytes);
-    Q_ASSERT(m_inputs.isEmpty());
-    Q_ASSERT(m_outputs.isEmpty());
-
-    QList<TxIn> inputs;
-    QList<TxOut> outputs;
-    QByteArray coinbaseMessage;
     MessageParser::Type type = parser.next();
     int inputScriptCount = -1;
     bool storedOutValue = false, storedOutScript = false;
     qint64 outValue = 0;
-    bool inBody = true;
-    QStringList errors;
-
-    struct ErrorReporter {
-        ~ErrorReporter() {
-            foreach (const QString &error, *errors) {
-                qWarning() << "Parse warning:" << error;
-            }
-        }
-        QStringList *errors;
-    };
-    ErrorReporter reporter;
-    reporter.errors = &errors;
 
     while (type == MessageParser::FoundTag) {
         switch (parser.tag()) {
         case TxEnd:
             break;
         case TxInPrevHash:
-            if (lint == StrictParsing && !inBody) errors << "signatures seen in body";
-            inputs.append(TxIn(parser.data().toByteArray()));
+            m_inputs.append(TxIn(parser.data().toByteArray()));
             break;
         case TxInPrevIndex:
-            if (lint == StrictParsing && !inBody) errors << "signatures seen in body";
-            if (inputs.isEmpty()) {
-                errors << "TxInPrevIndex seen without a TxInPrevHash before it";
-                return false;
-            }
-            inputs.last().prevIndex = parser.data().toInt();
+            if (m_inputs.isEmpty()) return false;
+            m_inputs.last().prevIndex = parser.data().toInt();
             break;
         case TxInputStackItem:
             ++inputScriptCount;
             // fall through
         case TxInputStackItemContinued:
             inBody = false;
-            if (inputScriptCount < 0) {
-                if (lint == StrictParsing)
-                    errors << "Missing TxInputStackItem before TxInputStackItemContinued";
+            if (inputScriptCount < 0)
                 inputScriptCount = 0;
-            }
-            if (inputScriptCount >= inputs.size()) {
-                errors << "Too many TxInputStackItem* tags in tx";
-                break;
-            }
-            inputs[inputScriptCount].scriptItems.append(parser.data().toByteArray());
+            if (inputScriptCount >= m_inputs.size()) break;
+            m_inputs[inputScriptCount].scriptItems.append(parser.data().toByteArray());
             break;
         case TxOutValue:
-            if (lint == StrictParsing && !inBody) errors << "signatures seen in body";
             if (storedOutScript) { // add it
-                outputs.last().value = parser.data().toLongLong();
+                m_outputs.last().value = parser.data().toLongLong();
                 storedOutScript = storedOutValue = false;
             } else { // store it
                 outValue = parser.data().toLongLong();
@@ -647,44 +612,22 @@ bool Transaction::parseTransactionV4(const QByteArray &bytes, Lint lint)
             }
             break;
         case TxOutScript:
-            if (lint == StrictParsing && !inBody) errors << "signatures seen in body";
-            outputs.append(TxOut(parser.data().toByteArray(), outValue));
+            m_outputs.append(TxOut(parser.data().toByteArray(), outValue));
             if (storedOutValue)
                 storedOutValue = false;
             else
                 storedOutScript = true;
             break;
-        case TxRelativeBlockLock:
-            errors << "TxRelativeBlockLock not supported right now" << parser.data().toString();
-            break;
-        case TxRelativeTimeLock:
-            errors << "TxRelativeTimeLock not supported right now" << parser.data().toString();
-            break;
         case CoinbaseMessage:
-            if (lint == StrictParsing && !inBody) errors << "signatures seen in body";
-            if (!inputs.isEmpty())
-                errors << "CoinbaseMessage found on an TX with inputs, this is not allowed!";
-            coinbaseMessage = parser.data().toByteArray();
-            break;
-        case 11: case 12: case 13: case 14: case 15: case 16: case 17: case 18: case 19:
-            errors << "Found unknown tag, skipping" << parser.data().toString();
+            m_coinbaseMessage = parser.data().toByteArray();
             break;
         default:
-            errors << "Found unknown tag, this TX is invalid" << parser.data().toString();
-            break;
+            return false;
         }
         type = parser.next();
     }
 
-    if (type != MessageParser::EndOfDocument) {
-        errors << "Failed parsing transaction, MessageParser gave error.";
-        return false;
-    }
-
-    m_inputs = inputs;
-    m_outputs = outputs;
-    m_coinbaseMessage = coinbaseMessage;
-    if (lint == StrictParsing && ((m_coinbaseMessage.isEmpty() && m_inputs.isEmpty()) || m_outputs.isEmpty() || !errors.isEmpty()))
+    if (type != MessageParser::EndOfDocument)
         return false;
     return true;
 }
