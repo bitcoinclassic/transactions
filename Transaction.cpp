@@ -448,8 +448,27 @@ void Transaction::debugScript(const QByteArray &script, int textIndent, QTextStr
     }
 }
 
+enum SigHashTypes {
+    SIGHASH_ALL = 1,
+    SIGHASH_NONE = 2,
+    SIGHASH_SINGLE = 3,
+    SIGHASH_FORKID = 0x40,
+    SIGHASH_ANYONECANPAY = 0x80,
+};
+
 void Transaction::debugInScript(const QList<QByteArray> &scriptItems, int textIndent, QTextStream &out)
 {
+    static QHash<unsigned char, QString> mapping;
+    if (mapping.isEmpty()) {
+        mapping.insert(SIGHASH_ALL, "ALL");
+        mapping.insert(SIGHASH_ALL|SIGHASH_ANYONECANPAY, "ALL|ANYONECANPAY");
+        mapping.insert(SIGHASH_NONE, "NONE");
+        mapping.insert(SIGHASH_NONE|SIGHASH_ANYONECANPAY, "NONE|ANYONECANPAY");
+        mapping.insert(SIGHASH_SINGLE, "SINGLE");
+        mapping.insert(SIGHASH_SINGLE|SIGHASH_ANYONECANPAY, "SINGLE|ANYONECANPAY");
+    }
+
+
     bool first = true;
     foreach (auto item, scriptItems) {
         if (item.length() == 1) {
@@ -464,9 +483,17 @@ void Transaction::debugInScript(const QList<QByteArray> &scriptItems, int textIn
             for (int i = 0; i < item.length(); ++i) {
                 printHex(data, i, out);
             }
-            out << endl;
+            if (first && scriptItems.count() == 2) {
+                const uint8_t chSigHashType = item.at(item.count()-1) &  0xBF;
+                if (mapping.contains(chSigHashType)) {
+                    out << ' ';
+                    const bool forkIdSet = (item.at(item.count()-1) & SIGHASH_FORKID) == SIGHASH_FORKID;
+                    out << '[' <<  mapping[chSigHashType] << (forkIdSet ? "|FORKID]" : "]");
+                }
+            }
         }
     }
+    out << endl;
 }
 
 bool Transaction::parseTransactionV1(const QByteArray &bytes, Lint lint)
