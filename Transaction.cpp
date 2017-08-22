@@ -590,15 +590,7 @@ bool Transaction::parseTransactionV4(const QByteArray &bytes, Lint lint)
     int inputScriptCount = -1;
     bool storedOutValue = false, storedOutScript = false;
     qint64 outValue = 0;
-    enum Section {
-        Undefined,
-        Inputs,
-        Outputs,
-        Additional,
-        Signatures,
-        End
-    };
-    Section section = Undefined;
+    bool inBody = true;
     QStringList errors;
 
     struct ErrorReporter {
@@ -615,28 +607,24 @@ bool Transaction::parseTransactionV4(const QByteArray &bytes, Lint lint)
     while (type == MessageParser::FoundTag) {
         switch (parser.tag()) {
         case TxEnd:
-            section = End;
             break;
         case TxInPrevHash:
-            if (lint == StrictParsing && section > Inputs)
-                errors << "TxInPrevHash found out of section";
-            section = Inputs;
+            if (lint == StrictParsing && !inBody) errors << "signatures seen in body";
             inputs.append(TxIn(parser.data().toByteArray()));
             break;
         case TxInPrevIndex:
+            if (lint == StrictParsing && !inBody) errors << "signatures seen in body";
             if (inputs.isEmpty()) {
                 errors << "TxInPrevIndex seen without a TxInPrevHash before it";
                 return false;
             }
-            if (lint == StrictParsing && section > Inputs)
-                errors << "TxInPrevIndex found out of section";
-            section = Inputs;
             inputs.last().prevIndex = parser.data().toInt();
             break;
         case TxInputStackItem:
             ++inputScriptCount;
             // fall through
         case TxInputStackItemContinued:
+            inBody = false;
             if (inputScriptCount < 0) {
                 if (lint == StrictParsing)
                     errors << "Missing TxInputStackItem before TxInputStackItemContinued";
@@ -646,13 +634,10 @@ bool Transaction::parseTransactionV4(const QByteArray &bytes, Lint lint)
                 errors << "Too many TxInputStackItem* tags in tx";
                 break;
             }
-            section = Signatures;
             inputs[inputScriptCount].scriptItems.append(parser.data().toByteArray());
             break;
         case TxOutValue:
-            if (lint == StrictParsing && section > Outputs)
-                errors << "TxOutValue found out of section";
-            section = Outputs;
+            if (lint == StrictParsing && !inBody) errors << "signatures seen in body";
             if (storedOutScript) { // add it
                 outputs.last().value = parser.data().toLongLong();
                 storedOutScript = storedOutValue = false;
@@ -662,9 +647,7 @@ bool Transaction::parseTransactionV4(const QByteArray &bytes, Lint lint)
             }
             break;
         case TxOutScript:
-            if (lint == StrictParsing && section > Outputs)
-                errors << "TxOutScript found out of section";
-            section = Outputs;
+            if (lint == StrictParsing && !inBody) errors << "signatures seen in body";
             outputs.append(TxOut(parser.data().toByteArray(), outValue));
             if (storedOutValue)
                 storedOutValue = false;
@@ -678,9 +661,7 @@ bool Transaction::parseTransactionV4(const QByteArray &bytes, Lint lint)
             errors << "TxRelativeTimeLock not supported right now" << parser.data().toString();
             break;
         case CoinbaseMessage:
-            if (lint == StrictParsing && section > Inputs)
-                errors << "CoinbaseMessage found out of section";
-            section = Inputs;
+            if (lint == StrictParsing && !inBody) errors << "signatures seen in body";
             if (!inputs.isEmpty())
                 errors << "CoinbaseMessage found on an TX with inputs, this is not allowed!";
             coinbaseMessage = parser.data().toByteArray();
